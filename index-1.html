@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jadwal Kuliah</title>
+<style>
+  /* ===== CSS: tampilan. Ubah warna di sini ===== */
+  :root {
+    --bg: #f3f6f4;
+    --surface: #ffffff;
+    --text: #1c2b26;
+    --muted: #5d6f68;
+    --line: #d5dfda;
+    --accent: #1f6f5c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12201b; --surface:#1a2c26; --text:#e8f1ed; --muted:#9bb0a8; --line:#2c4339; --accent:#5fc4a8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, "Times New Roman", serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:16px; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-bottom:28px; }
+  form .full { grid-column: 1 / -1; }
+  label { display:flex; flex-direction:column; font-size:.85rem; color:var(--muted); gap:4px; }
+  html, body { max-width:100%; overflow-x:hidden; }
+  input, select { width:100%; min-width:0; font: inherit; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); }
+  button { font: inherit; padding:10px; border:0; border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  h2 { font-size:1.15rem; margin:24px 0 8px; padding-bottom:4px; border-bottom:2px solid var(--accent); }
+  .item { display:flex; gap:12px; align-items:center; background:var(--surface); border:1px solid var(--line); border-left:6px solid var(--c); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .time { flex-shrink:0; font-variant-numeric: tabular-nums; min-width:92px; font-weight:bold; }
+  .info { flex:1; min-width:0; overflow-wrap:anywhere; }
+  .info small { color:var(--muted); display:block; }
+  .del { flex-shrink:0; background:transparent; color:var(--muted); border:1px solid var(--line); padding:4px 10px; }
+  .pesan { margin:0; min-height:1.2em; font-size:.9rem; color:var(--accent); }
+  .pesan.err { color:#d1493f; }
+  .empty { color:var(--muted); font-style:italic; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Jadwal Kuliah</h1>
+  <p class="sub">Semester ini, satu halaman.</p>
+
+  <!-- ===== HTML: form tambah jadwal ===== -->
+  <form id="form">
+    <label class="full">Mata kuliah <input id="nama" required placeholder="Contoh: Basis Data"></label>
+    <label>Hari
+      <select id="hari">
+        <option>Senin</option><option>Selasa</option><option>Rabu</option>
+        <option>Kamis</option><option>Jumat</option><option>Sabtu</option>
+      </select>
+    </label>
+    <label>Ruang <input id="ruang" placeholder="Contoh: CRK-33"></label>
+    <label>Kelas <input id="kelas" placeholder="Contoh: B2"></label>
+    <label>Mulai <select id="mulai" required></select></label>
+    <label>Selesai <select id="selesai" required></select></label>
+    <label class="full">Dosen <input id="dosen" placeholder="Nama dosen"></label>
+    <button class="full" type="button" id="tambah">Tambah jadwal</button>
+    <p class="full pesan" id="pesan" role="status"></p>
+  </form>
+
+  <section id="daftar"></section>
+</main>
+
+<script>
+  // ===== JavaScript: logika =====
+  const HARI = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+  const WARNA = ["#1f6f5c","#c2562d","#3b6fb6","#8a5a9e","#b58a1b","#2f8f9d"];
+  let jadwal = [];
+
+  // Isi pilihan waktu: 06:00 sampai 21:00, tiap 5 menit
+  function isiWaktu(id, awal) {
+    const sel = document.getElementById(id);
+    for (let m = 6 * 60; m <= 21 * 60; m += 5) {
+      const t = String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
+      const o = document.createElement("option");
+      o.value = o.textContent = t;
+      if (t === awal) o.selected = true;
+      sel.appendChild(o);
+    }
+  }
+  isiWaktu("mulai", "08:00");
+  isiWaktu("selesai", "10:00");
+
+  // Ambil data tersimpan (aman kalau penyimpanan diblokir)
+  try { jadwal = JSON.parse(localStorage.getItem("jadwal-v4")) || null; } catch (e) { jadwal = null; }
+
+  // Jadwal awal (dipakai kalau belum ada data tersimpan). Edit atau hapus sesuka hati.
+  if (!jadwal) {
+    jadwal = [
+      {"id": 1, "nama": "Pengantar Manajemen", "hari": "Senin", "mulai": "08:00", "selesai": "10:00", "ruang": "CRK-33", "kelas": "B2", "dosen": "Anna Valensia Christianty de Fretes, S.E., M.M., CPRM / Nur Azda, S.E., M.M."},
+      {"id": 2, "nama": "Matematika Bisnis", "hari": "Senin", "mulai": "10:15", "selesai": "12:15", "ruang": "CRK-31", "kelas": "B2", "dosen": "Walter Tabelessy, S.E., M.Si., CSBA / Saleh Tutupoho, S.E., M.Si"},
+      {"id": 3, "nama": "Bahasa Inggris", "hari": "Selasa", "mulai": "15:30", "selesai": "17:30", "ruang": "B. RK. 23", "kelas": "B1", "dosen": "Dewi Nidia Soepriadi, S.S., M.Hum., M.Si / Ryalno Stefano Noya, S.E., MIM"},
+      {"id": 4, "nama": "Pendidikan Pancasila", "hari": "Rabu", "mulai": "08:00", "selesai": "10:00", "ruang": "Auditorium", "kelas": "B2", "dosen": "Dr. Lisye Salamor, S.Pd., M.Pd"},
+      {"id": 5, "nama": "Pengantar Akuntansi", "hari": "Rabu", "mulai": "10:15", "selesai": "12:15", "ruang": "Auditorium", "kelas": "B2", "dosen": "Prof. Dr. Christina Sosositiksno, S.E., M.Si., Ak., CA / Pranatalindo Simanjuntak, S.E., M.Ak."},
+      {"id": 6, "nama": "Pengantar Ekonomi", "hari": "Kamis", "mulai": "08:00", "selesai": "10:00", "ruang": "CRK-31", "kelas": "B1", "dosen": "Dr. Djufri Rays Pattilouw, S.E., M.Si / Sherly Ferdinandus, S.E., M.Si"},
+      {"id": 7, "nama": "Agama Islam", "hari": "Kamis", "mulai": "10:30", "selesai": "12:15", "ruang": "Masjid Muhajirin, Poka, Pemda 1", "kelas": "Islam B", "dosen": "Erwin Notanubun, S.Th.I., M.Hum"},
+      {"id": 8, "nama": "Pengantar Teknologi dan Informasi", "hari": "Jumat", "mulai": "16:05", "selesai": "18:00", "ruang": "CRK-30", "kelas": "B1", "dosen": "Dr. Ferdy Leuhery, S.Kom., M.M., CIPM / Ervan Togatorop, S.TP., M.M"}
+    ];
+  }
+
+  function simpan() {
+    try { localStorage.setItem("jadwal-v4", JSON.stringify(jadwal)); } catch (e) {}
+  }
+
+  // Warna tetap per nama mata kuliah
+  function warna(nama) {
+    let h = 0;
+    for (const ch of nama) h = (h * 31 + ch.charCodeAt(0)) % WARNA.length;
+    return WARNA[h];
+  }
+
+  function tampil() {
+    const box = document.getElementById("daftar");
+    box.innerHTML = "";
+    if (jadwal.length === 0) {
+      box.innerHTML = '<p class="empty">Belum ada jadwal. Isi form di atas untuk menambah mata kuliah.</p>';
+      return;
+    }
+    HARI.forEach(h => {
+      const list = jadwal.filter(j => j.hari === h).sort((a, b) => a.mulai.localeCompare(b.mulai));
+      if (!list.length) return;
+      const judul = document.createElement("h2");
+      judul.textContent = h;
+      box.appendChild(judul);
+      list.forEach(j => {
+        const el = document.createElement("div");
+        el.className = "item";
+        el.style.setProperty("--c", warna(j.nama));
+        const detail = [j.ruang, j.kelas && ("Kelas " + j.kelas), j.dosen].filter(Boolean).join(" • ");
+        el.innerHTML = `
+          <div class="time">${j.mulai}–${j.selesai}</div>
+          <div class="info"><strong></strong><small></small></div>
+          <button class="del" aria-label="Hapus">Hapus</button>`;
+        // textContent supaya input pengguna tidak dibaca sebagai HTML
+        el.querySelector("strong").textContent = j.nama;
+        el.querySelector("small").textContent = detail;
+        el.querySelector(".del").onclick = () => {
+          jadwal = jadwal.filter(x => x.id !== j.id);
+          simpan(); tampil();
+        };
+        box.appendChild(el);
+      });
+    });
+  }
+
+  document.getElementById("tambah").addEventListener("click", () => {
+    const pesan = document.getElementById("pesan");
+    const tampilPesan = (t, err) => { pesan.textContent = t; pesan.className = "full pesan" + (err ? " err" : ""); };
+    const v = id => document.getElementById(id).value.trim();
+    // Terima 8.00, 08.00, 0800, atau 08:00, lalu ubah jadi 08:00
+    const jam = t => {
+      const m = t.replace(".", ":").match(/^(\d{1,2}):?(\d{2})$/);
+      if (!m || +m[1] > 23 || +m[2] > 59) return null;
+      return m[1].padStart(2, "0") + ":" + m[2];
+    };
+    if (!v("nama")) { tampilPesan("Isi nama mata kuliah dulu.", true); return; }
+    if (!jam(v("mulai")) || !jam(v("selesai"))) { tampilPesan("Pilih jam mulai dan selesai.", true); return; }
+    if (jam(v("mulai")) >= jam(v("selesai"))) { tampilPesan("Jam selesai harus lebih akhir dari jam mulai.", true); return; }
+    jadwal.push({
+      id: Date.now(), nama: v("nama"), hari: v("hari"),
+      mulai: jam(v("mulai")), selesai: jam(v("selesai")), ruang: v("ruang"), kelas: v("kelas"), dosen: v("dosen")
+    });
+    simpan(); tampil();
+    document.getElementById("form").reset();
+    tampilPesan("Jadwal ditambahkan.", false);
+    document.getElementById("mulai").value = "08:00";
+    document.getElementById("selesai").value = "10:00";
+  });
+
+  tampil();
+</script>
+</body>
+</html>
